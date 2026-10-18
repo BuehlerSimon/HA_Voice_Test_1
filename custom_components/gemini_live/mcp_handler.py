@@ -823,7 +823,13 @@ class HomeAssistantMCPTools:
             },
             {
                 "name": "call_service",
-                "description": "Call a Home Assistant service to control devices",
+                "description": (
+                    "Call a Home Assistant service to control devices, e.g. "
+                    "domain='light', service='turn_off', target={'entity_id': ['light.kitchen']}. "
+                    "Always use exact entity_ids from get_entities_by_domain or "
+                    "get_area_entities; never guess them. The result contains the "
+                    "entity states after the call."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -842,16 +848,18 @@ class HomeAssistantMCPTools:
                                 "entity_id": {
                                     "type": "array",
                                     "items": {"type": "string"},
+                                    "description": "Exact entity IDs, e.g. ['light.kitchen']",
                                 },
                                 "area_id": {
                                     "type": "array",
                                     "items": {"type": "string"},
+                                    "description": "Area IDs or area names",
                                 },
                             },
                         },
                         "data": {
                             "type": "object",
-                            "description": "Additional service data",
+                            "description": "Additional service data, e.g. {'brightness_pct': 50}",
                         },
                     },
                     "required": ["domain", "service"],
@@ -919,23 +927,109 @@ class HomeAssistantMCPTools:
             "last_changed": state.last_changed.isoformat(),
         }
 
-    async def _call_service(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Call a Home Assistant service."""
-        domain = arguments.get("domain", "")
-        service = arguments.get("service", "")
-        target = arguments.get("target", {})
-        data = arguments.get("data", {})
+    @staticmethod
+    def _as_list(value: Any) -> list[str]:
+        """Normalize a string / list / comma-separated value to a list."""
+        if not value:
+            return []
+        if isinstance(value, str):
+            return [v.strip() for v in value.split(",") if v.strip()]
+        return [str(v) for v in value if v]
 
+    def _resolve_area_id(self, area: str) -> str | None:
+        """Resolve an area id, name or alias to an area id."""
+        from homeassistant.helpers import area_registry
+
+        area_reg = area_registry.async_get(self._hass)
+        if area_reg.async_get_area(area):
+            return area
+        wanted = area.strip().lower()
+        for entry in area_reg.async_list_areas():
+            names = {entry.name.lower(), *(alias.lower() for alias in entry.aliases)}
+            if wanted in names:
+                return entry.id
+        return None
+
+    async def _call_service(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Call a Home Assistant service and report the resulting states.
+
+        The model may put entity_id/area_id in ``target``, in ``data`` or at
+        the top level; all are accepted. Unknown entities, unknown areas and
+        missing targets are reported as errors instead of silently doing
+        nothing, so the model cannot claim success for a no-op.
+        """
+        domain = str(arguments.get("domain", "")).strip()
+        service = str(arguments.get("service", "")).strip()
+        target = dict(arguments.get("target") or {})
+        data = dict(arguments.get("data") or {})
+
+        if not self._hass.services.has_service(domain, service):
+            return {
+                "error": f"Service {domain}.{service} does not exist",
+                "hint": "Use services like light.turn_off, switch.turn_on, climate.set_temperature.",
+            }
+
+        entity_ids = self._as_list(target.pop("entity_id", None))
+        entity_ids += self._as_list(data.pop("entity_id", None))
+        entity_ids += self._as_list(arguments.get("entity_id"))
+        areas = self._as_list(target.pop("area_id", None))
+        areas += self._as_list(data.pop("area_id", None))
+        areas += self._as_list(arguments.get("area_id"))
+
+        unknown_entities = [e for e in entity_ids if self._hass.states.get(e) is None]
+        if unknown_entities:
+            return {
+                "error": f"Unknown entity_id(s): {', '.join(unknown_entities)}",
+                "hint": "Look up exact entity_ids with get_entities_by_domain or get_area_entities first.",
+            }
+
+        area_ids = []
+        for area in areas:
+            area_id = self._resolve_area_id(area)
+            if area_id is None:
+                return {
+                    "error": f"Unknown area: {area}",
+                    "hint": "Use get_area_entities with the room name to find its entities.",
+                }
+            area_ids.append(area_id)
+
+        service_target: dict[str, Any] = {k: v for k, v in target.items() if v}
+        if entity_ids:
+            service_target["entity_id"] = list(dict.fromkeys(entity_ids))
+        if area_ids:
+            service_target["area_id"] = list(dict.fromkeys(area_ids))
+
+        if not service_target and domain not in ("homeassistant", "notify", "script", "scene", "automation"):
+            return {
+                "error": f"No target given for {domain}.{service}",
+                "hint": "Pass target.entity_id (e.g. ['light.kitchen']) or target.area_id.",
+            }
+
+        _LOGGER.info("Calling %s.%s target=%s data=%s", domain, service, service_target, data)
         try:
             await self._hass.services.async_call(
                 domain,
                 service,
-                {**data, **target},
+                service_data=data,
+                target=service_target or None,
                 blocking=True,
             )
-            return {"success": True, "message": f"Called {domain}.{service}"}
         except Exception as e:
+            _LOGGER.warning("Service call %s.%s failed: %s", domain, service, e)
             return {"error": str(e)}
+
+        # Report resulting states so the model can verify the action
+        states = {}
+        for entity_id in service_target.get("entity_id", []):
+            state = self._hass.states.get(entity_id)
+            if state:
+                states[entity_id] = state.state
+        return {
+            "success": True,
+            "message": f"Called {domain}.{service}",
+            "target": service_target,
+            "states_after": states,
+        }
 
     async def _get_entities_by_domain(
         self,
