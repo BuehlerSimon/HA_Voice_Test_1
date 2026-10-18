@@ -643,6 +643,16 @@ class GeminiLiveCard extends HTMLElement {
         if (!this._hass) return;
         if (this._connecting) return;  // Already connecting, wait
         if (this._listening) return;  // Already listening
+
+        // Check microphone support before opening a Gemini session. Browsers
+        // only expose getUserMedia in secure contexts (HTTPS or localhost).
+        const micError = this._getMicrophoneSupportError();
+        if (micError) {
+            this._addMessage("system", micError);
+            this._render();
+            return;
+        }
+
         // Mark that a listen request is pending until backend confirms
         this._pendingListen = true;
         this._render();
@@ -685,8 +695,28 @@ class GeminiLiveCard extends HTMLElement {
             logWS('recv', 'START_LISTENING_ERROR', { error: e.message });
             this._addMessage("system", `Failed to start: ${e.message}`);
             this._pendingListen = false;
+            this._audioInitializing = false;
+            this._stopRecording();
+            // Release the backend listening state started above
+            try {
+                await this._hass.callWS({ type: `${DOMAIN}/stop_listening` });
+            } catch (stopError) {
+                console.debug("stop_listening after failed start:", stopError);
+            }
             this._render();
         }
+    }
+
+    _getMicrophoneSupportError() {
+        if (!window.isSecureContext) {
+            return "Microphone requires a secure connection. Open Home Assistant via HTTPS " +
+                "(e.g. Nabu Casa or a reverse proxy) instead of http://. Text chat still works.";
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            return "Microphone access is not available in this browser/app. " +
+                "Check that the app has microphone permission.";
+        }
+        return null;
     }
 
     async _stopListening() {
