@@ -1,0 +1,19 @@
+{
+  "domain": "gemini_live",
+  "name": "Gemini Live Conversation",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [
+    "conversation",
+    "media_player",
+    "http",
+    "frontend"
+  ],
+  "documentation": "https://github.com/SJang1/ha-ai-audio",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/SJang1/ha-ai-audio/issues",
+  "requirements": [
+    "google-genai>=2.0.0"
+  ],
+  "version": "1.1.0"
+}
