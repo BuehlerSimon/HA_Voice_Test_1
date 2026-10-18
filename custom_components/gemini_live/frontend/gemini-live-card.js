@@ -475,13 +475,12 @@ class GeminiLiveCard extends HTMLElement {
 
     _handleSessionResumptionUpdate(data) {
         logWS('recv', 'SESSION_RESUMPTION_UPDATE_HANDLED', data);
-        // Store the resumption handle for later use
+        // The backend resumes dropped connections itself. The handle is not
+        // persisted: resuming an old session on the next connect would replay
+        // its history (including earlier failed answers) and its old config.
         if (data.handle) {
             this._resumptionHandle = data.handle;
             this._sessionResumable = data.resumable || false;
-            // Persist to localStorage for page refresh recovery
-            const storageKey = `gemini_live_handle`;
-            localStorage.setItem(storageKey, data.handle);
         }
     }
 
@@ -582,21 +581,18 @@ class GeminiLiveCard extends HTMLElement {
         this._render();  // Show "Connecting..." state
 
         try {
-            // Check for stored resumption handle
-            const storageKey = `gemini_live_handle`;
-            const storedHandle = localStorage.getItem(storageKey);
+            // Remove handles persisted by older card versions; every manual
+            // connect starts a fresh session.
+            try {
+                localStorage.removeItem("gemini_live_handle");
+            } catch (storageError) {
+                // Storage may be unavailable (private mode); nothing to clean up
+            }
 
             const connectParams = {
                 type: `${DOMAIN}/connect`,
             };
-
-            // Include resumption handle if available
-            if (storedHandle) {
-                connectParams.resumption_handle = storedHandle;
-                logWS('send', 'CONNECT (resume)', connectParams);
-            } else {
-                logWS('send', 'CONNECT', connectParams);
-            }
+            logWS('send', 'CONNECT', connectParams);
 
             const result = await this._hass.callWS(connectParams);
             logWS('recv', 'CONNECT_RESULT', result);
@@ -612,9 +608,6 @@ class GeminiLiveCard extends HTMLElement {
         } catch (e) {
             console.error("Failed to connect:", e);
             logWS('recv', 'CONNECT_ERROR', { error: e.message });
-            // Clear invalid handle if resume failed
-            const storageKey = `gemini_live_handle`;
-            localStorage.removeItem(storageKey);
             this._connecting = false;
             this._render();
             return false;
