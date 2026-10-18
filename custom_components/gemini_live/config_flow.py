@@ -33,7 +33,6 @@ from .const import (
     CONF_TEMPERATURE,
     CONF_THINKING_LEVEL,
     CONF_VOICE,
-    CONF_ENABLE_PERSONALIZATION,
     DEFAULT_INSTRUCTIONS,
     DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
@@ -107,10 +106,7 @@ class GeminiLiveConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Save config and, if personalization was enabled, require explicit confirmation.
             self._config = user_input
-            if self._config.get(CONF_ENABLE_PERSONALIZATION):
-                return await self.async_step_personalization_confirm()
             return await self.async_step_mcp_menu()
 
         return self.async_show_form(
@@ -157,9 +153,6 @@ class GeminiLiveConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Optional(
                         CONF_ENABLE_GOOGLE_SEARCH, default=True
-                    ): selector.BooleanSelector(),
-                    vol.Optional(
-                        CONF_ENABLE_PERSONALIZATION, default=False
                     ): selector.BooleanSelector(),
                     vol.Optional(
                         CONF_ENABLE_AFFECTIVE_DIALOG, default=False
@@ -215,36 +208,6 @@ class GeminiLiveConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "server_count": str(len(self._mcp_servers)),
                 "server_list": server_list,
             },
-        )
-
-    async def async_step_personalization_confirm(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Show a warning/confirmation when personalization is enabled."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            # If user confirms, continue; otherwise disable personalization and continue.
-            if user_input.get("confirm_personalization"):
-                return await self.async_step_mcp_menu()
-            # User did not confirm; disable the option and continue
-            self._config[CONF_ENABLE_PERSONALIZATION] = False
-            return await self.async_step_mcp_menu()
-
-        return self.async_show_form(
-            step_id="personalization_confirm",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("confirm_personalization", default=False): selector.BooleanSelector()
-                }
-            ),
-            description_placeholders={
-                "warning": (
-                    "Enabling personalization may send additional conversation data to the service. "
-                    "Only enable if you understand and accept potential data handling implications."
-                )
-            },
-            errors=errors,
         )
 
     async def async_step_mcp_add_sse(
@@ -341,7 +304,6 @@ class GeminiLiveConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_INSTRUCTIONS: self._config.get(CONF_INSTRUCTIONS, DEFAULT_INSTRUCTIONS),
             CONF_TEMPERATURE: self._config.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
             CONF_THINKING_LEVEL: self._config.get(CONF_THINKING_LEVEL, DEFAULT_THINKING_LEVEL),
-            CONF_ENABLE_PERSONALIZATION: self._config.get(CONF_ENABLE_PERSONALIZATION, False),
             CONF_ENABLE_GOOGLE_SEARCH: self._config.get(CONF_ENABLE_GOOGLE_SEARCH, True),
             CONF_ENABLE_AFFECTIVE_DIALOG: self._config.get(CONF_ENABLE_AFFECTIVE_DIALOG, False),
             CONF_ENABLE_PROACTIVE_AUDIO: self._config.get(CONF_ENABLE_PROACTIVE_AUDIO, False),
@@ -392,7 +354,6 @@ class GeminiLiveOptionsFlow(config_entries.OptionsFlow):
                 CONF_TEMPERATURE: user_input.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
                 CONF_THINKING_LEVEL: user_input.get(CONF_THINKING_LEVEL, DEFAULT_THINKING_LEVEL),
                 CONF_ENABLE_GOOGLE_SEARCH: user_input.get(CONF_ENABLE_GOOGLE_SEARCH, True),
-                CONF_ENABLE_PERSONALIZATION: user_input.get(CONF_ENABLE_PERSONALIZATION, False),
                 CONF_ENABLE_AFFECTIVE_DIALOG: user_input.get(CONF_ENABLE_AFFECTIVE_DIALOG, False),
                 CONF_ENABLE_PROACTIVE_AUDIO: user_input.get(CONF_ENABLE_PROACTIVE_AUDIO, False),
             }
@@ -453,10 +414,6 @@ class GeminiLiveOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_ENABLE_GOOGLE_SEARCH,
                         default=current_config.get(CONF_ENABLE_GOOGLE_SEARCH, True),
-                    ): selector.BooleanSelector(),
-                    vol.Optional(
-                        CONF_ENABLE_PERSONALIZATION,
-                        default=current_config.get(CONF_ENABLE_PERSONALIZATION, False),
                     ): selector.BooleanSelector(),
                     vol.Optional(
                         CONF_ENABLE_AFFECTIVE_DIALOG,

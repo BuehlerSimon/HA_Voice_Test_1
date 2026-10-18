@@ -843,11 +843,11 @@ class HomeAssistantMCPTools:
                     "properties": {
                         "domain": {
                             "type": "string",
-                            "description": "The service domain (e.g., light, switch)",
+                            "description": "The service domain, e.g. light, switch (optional if service is 'domain.service')",
                         },
                         "service": {
                             "type": "string",
-                            "description": "The service name (e.g., turn_on, turn_off)",
+                            "description": "The service, e.g. 'turn_off' (with domain) or 'light.turn_off'",
                         },
                         "target": {
                             "type": "object",
@@ -870,7 +870,7 @@ class HomeAssistantMCPTools:
                             "description": "Additional service data, e.g. {'brightness_pct': 50}",
                         },
                     },
-                    "required": ["domain", "service"],
+                    "required": ["service"],
                 },
             },
             {
@@ -1033,6 +1033,11 @@ class HomeAssistantMCPTools:
         service = str(arguments.get("service", "")).strip().lower()
         target = dict(arguments.get("target") or {})
         data = dict(arguments.get("data") or {})
+
+        # Accept the common "light.turn_off" notation in service (with or without domain)
+        if "." in service:
+            service_domain, service = service.split(".", 1)
+            domain = domain or service_domain
 
         if not self._hass.services.has_service(domain, service):
             return {

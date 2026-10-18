@@ -22,7 +22,6 @@ CONF_TEMPERATURE: Final = "temperature"
 CONF_ENABLE_AFFECTIVE_DIALOG: Final = "enable_affective_dialog"
 CONF_ENABLE_PROACTIVE_AUDIO: Final = "enable_proactive_audio"
 CONF_ENABLE_GOOGLE_SEARCH: Final = "enable_google_search"
-CONF_ENABLE_PERSONALIZATION: Final = "enable_personalization"
 CONF_MEDIA_RESOLUTION: Final = "media_resolution"
 CONF_THINKING_LEVEL: Final = "thinking_level"
 

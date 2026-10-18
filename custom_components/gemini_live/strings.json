@@ -5,85 +5,85 @@
         "title": "Gemini Live",
         "description": "Enter your Google AI API key to connect to the Gemini Live API.",
         "data": {
-          "api_key": "API Key",
-          "thinking_level": "Thinking Level"
+          "api_key": "API Key"
         },
         "data_description": {
-          "api_key": "Your Google AI API key from https://aistudio.google.com/app/apikey",
-          "thinking_level": "Only used by models that support it (3.8 Live Extended Thinking, 3.1 Flash Live). Ignored by gemini-3.8-live."
+          "api_key": "Create a key at https://aistudio.google.com/apikey"
         }
       },
       "configure": {
         "title": "Configuration",
         "description": "Configure the Gemini Live settings.",
         "data": {
+          "name": "Name",
           "model": "Model",
           "voice": "Voice",
           "instructions": "System Instructions",
           "temperature": "Temperature",
-          "enable_personalization": "Enable Personalization",
+          "thinking_level": "Thinking Level",
           "enable_google_search": "Enable Google Search",
           "enable_affective_dialog": "Enable Affective Dialog",
           "enable_proactive_audio": "Enable Proactive Audio"
         },
         "data_description": {
-          "model": "The Gemini model to use for live conversations",
-          "voice": "The voice to use for audio responses",
-          "instructions": "System instructions for the AI assistant",
-          "temperature": "Controls randomness in responses (0.0-2.0)",
-          "enable_personalization": "When enabled, the service may use conversation content to personalize responses. Disabled by default for privacy.",
-          "enable_google_search": "Allow the AI to search the web using Google Search",
-          "enable_affective_dialog": "Enable emotional and expressive responses",
-          "enable_proactive_audio": "Enable proactive audio output"
+          "name": "Name of this integration entry.",
+          "model": "gemini-3.8-live is the recommended default. Extended Thinking reasons in the background; 3.1 Flash Live and 2.5 are legacy.",
+          "voice": "Prebuilt Gemini voice used for spoken responses.",
+          "instructions": "System prompt that defines how the assistant behaves. Home Assistant context is added automatically.",
+          "temperature": "Randomness of responses (0.0 = focused, 2.0 = creative).",
+          "thinking_level": "How much the model reasons before answering. Only used by 3.8 Live Extended Thinking (low/medium/high) and 3.1 Flash Live; ignored by gemini-3.8-live.",
+          "enable_google_search": "Let Gemini search the web with Google for current information (weather, news, facts).",
+          "enable_affective_dialog": "Gemini adapts tone and speaking style to the emotion in your voice. Not available on 3.1 Flash Live.",
+          "enable_proactive_audio": "Gemini decides itself whether to respond and ignores speech not directed at it (e.g. TV, background conversations). Not available on 3.1 Flash Live."
         }
       },
       "mcp_menu": {
         "title": "MCP Servers",
-        "description": "Configure Model Context Protocol (MCP) servers for extended tool capabilities.",
-        "menu_options": {
-          "add_sse": "Add SSE Server",
-          "add_stdio": "Add Stdio Server",
-          "finish": "Finish Setup"
+        "description": "Optionally add Model Context Protocol (MCP) servers whose tools Gemini can use.\n\nConfigured servers ({server_count}):\n{server_list}",
+        "data": {
+          "action": "Action"
+        },
+        "data_description": {
+          "action": "Choose what to do next."
         }
       },
       "mcp_add_sse": {
         "title": "Add SSE MCP Server",
-        "description": "Add a Server-Sent Events MCP server.",
+        "description": "Add an MCP server reachable over HTTP (Streamable HTTP/SSE).",
         "data": {
           "name": "Server Name",
-          "url": "Server URL"
+          "url": "Server URL",
+          "token": "Bearer Token"
         },
         "data_description": {
-          "name": "A unique name for this server",
-          "url": "The URL of the SSE MCP server"
+          "name": "Unique name; used as prefix for the tool names (server__tool).",
+          "url": "JSON-RPC endpoint of the MCP server (Streamable HTTP/SSE), e.g. http://homeassistant.local:8123/api/mcp",
+          "token": "Optional. Sent as 'Authorization: Bearer <token>' (e.g. a Home Assistant long-lived access token)."
         }
       },
       "mcp_add_stdio": {
         "title": "Add Stdio MCP Server",
-        "description": "Add a stdio MCP server that runs as a subprocess.",
+        "description": "Add an MCP server that Home Assistant starts as a subprocess.",
         "data": {
           "name": "Server Name",
           "command": "Command",
-          "args": "Arguments"
+          "args": "Arguments",
+          "env": "Environment Variables"
         },
         "data_description": {
-          "name": "A unique name for this server",
-          "command": "The command to run (e.g., npx, uvx)",
-          "args": "Command arguments (one per line)"
+          "name": "Unique name; used as prefix for the tool names (server__tool).",
+          "command": "Executable started by Home Assistant, e.g. npx or uvx. Must exist inside the Home Assistant container.",
+          "args": "Comma-separated arguments, e.g. -y,@modelcontextprotocol/server-filesystem,/config",
+          "env": "Comma-separated KEY=value pairs, e.g. API_KEY=xxx,DEBUG=true"
         }
       }
     },
-    "personalization_confirm": {
-      "title": "Personalization - Confirm",
-      "description": "Enabling personalization may send additional conversation data to the external service to improve and personalize responses. Only enable if you accept the potential data handling implications.",
-      "data": {
-        "confirm_personalization": "I understand and accept the privacy implications"
-      }
-    },
     "error": {
+      "invalid_auth": "Invalid API key",
       "invalid_api_key": "Invalid API key",
-      "cannot_connect": "Cannot connect to Gemini API",
-      "unknown": "Unknown error occurred"
+      "invalid_url": "Invalid URL. It must start with http:// or https://",
+      "cannot_connect": "Cannot connect to the Gemini API",
+      "unknown": "Unexpected error"
     },
     "abort": {
       "already_configured": "This integration is already configured"
@@ -93,41 +93,101 @@
     "step": {
       "init": {
         "title": "Options",
-        "description": "Configure Gemini Live options.",
+        "description": "Configure Gemini Live options. Changes reload the integration.",
         "data": {
           "model": "Model",
           "voice": "Voice",
           "instructions": "System Instructions",
           "temperature": "Temperature",
+          "thinking_level": "Thinking Level",
           "enable_google_search": "Enable Google Search",
           "enable_affective_dialog": "Enable Affective Dialog",
-          "enable_proactive_audio": "Enable Proactive Audio",
-          "thinking_level": "Thinking Level"
+          "enable_proactive_audio": "Enable Proactive Audio"
+        },
+        "data_description": {
+          "model": "gemini-3.8-live is the recommended default. Extended Thinking reasons in the background; 3.1 Flash Live and 2.5 are legacy.",
+          "voice": "Prebuilt Gemini voice used for spoken responses.",
+          "instructions": "System prompt that defines how the assistant behaves. Home Assistant context is added automatically.",
+          "temperature": "Randomness of responses (0.0 = focused, 2.0 = creative).",
+          "thinking_level": "How much the model reasons before answering. Only used by 3.8 Live Extended Thinking (low/medium/high) and 3.1 Flash Live; ignored by gemini-3.8-live.",
+          "enable_google_search": "Let Gemini search the web with Google for current information (weather, news, facts).",
+          "enable_affective_dialog": "Gemini adapts tone and speaking style to the emotion in your voice. Not available on 3.1 Flash Live.",
+          "enable_proactive_audio": "Gemini decides itself whether to respond and ignores speech not directed at it (e.g. TV, background conversations). Not available on 3.1 Flash Live."
         }
       },
       "mcp_menu": {
         "title": "MCP Servers",
-        "menu_options": {
-          "add_sse": "Add SSE Server",
-          "add_stdio": "Add Stdio Server",
-          "finish": "Save and Close"
+        "description": "Manage Model Context Protocol (MCP) servers.\n\nConfigured servers ({server_count}):\n{server_list}",
+        "data": {
+          "action": "Action"
+        },
+        "data_description": {
+          "action": "Choose what to do next."
+        }
+      },
+      "mcp_manage": {
+        "title": "Manage MCP Servers",
+        "description": "Edit, enable/disable or delete a configured MCP server.",
+        "data": {
+          "action": "Action"
+        },
+        "data_description": {
+          "action": "Choose what to do next."
         }
       },
       "mcp_add_sse": {
         "title": "Add SSE MCP Server",
+        "description": "Add an MCP server reachable over HTTP (Streamable HTTP/SSE).",
         "data": {
           "name": "Server Name",
-          "url": "Server URL"
+          "url": "Server URL",
+          "token": "Bearer Token"
+        },
+        "data_description": {
+          "name": "Unique name; used as prefix for the tool names (server__tool).",
+          "url": "JSON-RPC endpoint of the MCP server (Streamable HTTP/SSE), e.g. http://homeassistant.local:8123/api/mcp",
+          "token": "Optional. Sent as 'Authorization: Bearer <token>' (e.g. a Home Assistant long-lived access token)."
         }
       },
       "mcp_add_stdio": {
         "title": "Add Stdio MCP Server",
+        "description": "Add an MCP server that Home Assistant starts as a subprocess.",
         "data": {
           "name": "Server Name",
           "command": "Command",
-          "args": "Arguments"
+          "args": "Arguments",
+          "env": "Environment Variables"
+        },
+        "data_description": {
+          "name": "Unique name; used as prefix for the tool names (server__tool).",
+          "command": "Executable started by Home Assistant, e.g. npx or uvx. Must exist inside the Home Assistant container.",
+          "args": "Comma-separated arguments, e.g. -y,@modelcontextprotocol/server-filesystem,/config",
+          "env": "Comma-separated KEY=value pairs, e.g. API_KEY=xxx,DEBUG=true"
+        }
+      },
+      "mcp_edit": {
+        "title": "Edit MCP Server",
+        "description": "Change the settings of this MCP server.",
+        "data": {
+          "name": "Server Name",
+          "url": "Server URL",
+          "token": "Bearer Token",
+          "command": "Command",
+          "args": "Arguments",
+          "env": "Environment Variables"
+        },
+        "data_description": {
+          "name": "Unique name; used as prefix for the tool names (server__tool).",
+          "url": "JSON-RPC endpoint of the MCP server (Streamable HTTP/SSE), e.g. http://homeassistant.local:8123/api/mcp",
+          "token": "Optional. Sent as 'Authorization: Bearer <token>' (e.g. a Home Assistant long-lived access token).",
+          "command": "Executable started by Home Assistant, e.g. npx or uvx. Must exist inside the Home Assistant container.",
+          "args": "Comma-separated arguments, e.g. -y,@modelcontextprotocol/server-filesystem,/config",
+          "env": "Comma-separated KEY=value pairs, e.g. API_KEY=xxx,DEBUG=true"
         }
       }
+    },
+    "error": {
+      "invalid_url": "Invalid URL. It must start with http:// or https://"
     }
   },
   "services": {
