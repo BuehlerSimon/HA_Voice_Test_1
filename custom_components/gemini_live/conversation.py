@@ -188,7 +188,7 @@ Always confirm actions you take and provide helpful feedback.
         _LOGGER.info("Executing function: %s with args: %s", function_name, arguments)
         
         # Check for Home Assistant built-in tools
-        if function_name in ["get_entity_state", "call_service", "get_entities_by_domain", "get_area_entities"]:
+        if function_name in HomeAssistantMCPTools.TOOL_NAMES:
             return await self._ha_tools.execute_tool(function_name, arguments)
         
         # Check if this is an MCP server function (format: server_name__tool_name)

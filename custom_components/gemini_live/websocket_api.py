@@ -168,7 +168,7 @@ async def websocket_connect(
             result = None
             
             # Check for Home Assistant built-in tools
-            if ha_tools and function_name in ["get_entity_state", "call_service", "get_entities_by_domain", "get_area_entities"]:
+            if ha_tools and function_name in HomeAssistantMCPTools.TOOL_NAMES:
                 result = await ha_tools.execute_tool(function_name, arguments)
             # Check if this is an MCP server function (format: server_name__tool_name)
             elif mcp_handler and "__" in function_name:

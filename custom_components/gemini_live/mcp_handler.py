@@ -800,6 +800,14 @@ class MCPServerHandler:
 class HomeAssistantMCPTools:
     """Built-in Home Assistant MCP-like tools."""
 
+    TOOL_NAMES = frozenset({
+        "get_entity_state",
+        "call_service",
+        "get_entities_by_domain",
+        "get_area_entities",
+        "list_areas",
+    })
+
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize with Home Assistant instance."""
         self._hass = hass
@@ -881,17 +889,29 @@ class HomeAssistantMCPTools:
             },
             {
                 "name": "get_area_entities",
-                "description": "Get all entities in a specific area",
+                "description": (
+                    "Get all entities in a room/area. Use this to find the exact "
+                    "entity_ids before controlling devices in a room."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "area_id": {
                             "type": "string",
-                            "description": "The area ID or name",
+                            "description": "The area ID, name or alias (e.g. 'Simon', 'Kitchen')",
+                        },
+                        "domain": {
+                            "type": "string",
+                            "description": "Optional domain filter, e.g. 'light'",
                         },
                     },
                     "required": ["area_id"],
                 },
+            },
+            {
+                "name": "list_areas",
+                "description": "List all rooms/areas with their area_id, name and aliases",
+                "parameters": {"type": "object", "properties": {}},
             },
         ]
 
@@ -900,17 +920,25 @@ class HomeAssistantMCPTools:
         tool_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """Execute a built-in tool."""
-        if tool_name == "get_entity_state":
-            return await self._get_entity_state(arguments)
-        elif tool_name == "call_service":
-            return await self._call_service(arguments)
-        elif tool_name == "get_entities_by_domain":
-            return await self._get_entities_by_domain(arguments)
-        elif tool_name == "get_area_entities":
-            return await self._get_area_entities(arguments)
+        """Execute a built-in tool and log failures so they show up in the HA log."""
+        handlers = {
+            "get_entity_state": self._get_entity_state,
+            "call_service": self._call_service,
+            "get_entities_by_domain": self._get_entities_by_domain,
+            "get_area_entities": self._get_area_entities,
+            "list_areas": self._list_areas,
+        }
+        handler = handlers.get(tool_name)
+        if handler is None:
+            result: dict[str, Any] = {"error": f"Unknown tool: {tool_name}"}
+        else:
+            result = await handler(arguments)
 
-        return {"error": f"Unknown tool: {tool_name}"}
+        if "error" in result:
+            _LOGGER.warning("Tool %s failed for %s: %s", tool_name, arguments, result)
+        else:
+            _LOGGER.debug("Tool %s(%s) -> %s", tool_name, arguments, result)
+        return result
 
     async def _get_entity_state(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Get entity state."""
@@ -937,18 +965,61 @@ class HomeAssistantMCPTools:
         return [str(v) for v in value if v]
 
     def _resolve_area_id(self, area: str) -> str | None:
-        """Resolve an area id, name or alias to an area id."""
+        """Resolve an area id, name or alias to an area id.
+
+        Falls back to a word match so phrases like "Simons Zimmer" or
+        "Küche Licht" find the areas "Simon" and "Küche". Returns None if
+        nothing or more than one area matches.
+        """
         from homeassistant.helpers import area_registry
 
         area_reg = area_registry.async_get(self._hass)
         if area_reg.async_get_area(area):
             return area
         wanted = area.strip().lower()
-        for entry in area_reg.async_list_areas():
-            names = {entry.name.lower(), *(alias.lower() for alias in entry.aliases)}
+        areas = list(area_reg.async_list_areas())
+        for entry in areas:
+            names = {entry.name.lower(), entry.id.lower(), *(alias.lower() for alias in entry.aliases)}
             if wanted in names:
                 return entry.id
+
+        words = [w for w in re.split(r"[^\w]+", wanted) if w]
+        matches = set()
+        for entry in areas:
+            for name in {entry.name.lower(), *(alias.lower() for alias in entry.aliases)}:
+                if any(w == name or (len(name) >= 3 and w.startswith(name)) for w in words):
+                    matches.add(entry.id)
+        if len(matches) == 1:
+            return matches.pop()
         return None
+
+    def _area_entity_ids(self, area_id: str) -> list[str]:
+        """Return entity_ids in an area, including those assigned via their device."""
+        from homeassistant.helpers import device_registry, entity_registry
+
+        device_reg = device_registry.async_get(self._hass)
+        entity_reg = entity_registry.async_get(self._hass)
+        entity_ids = []
+        for entry in entity_reg.entities.values():
+            entry_area = entry.area_id
+            if entry_area is None and entry.device_id:
+                device = device_reg.async_get(entry.device_id)
+                entry_area = device.area_id if device else None
+            if entry_area == area_id:
+                entity_ids.append(entry.entity_id)
+        return entity_ids
+
+    async def _list_areas(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """List all areas with their ids, names and aliases."""
+        from homeassistant.helpers import area_registry
+
+        area_reg = area_registry.async_get(self._hass)
+        return {
+            "areas": [
+                {"area_id": a.id, "name": a.name, "aliases": sorted(a.aliases)}
+                for a in area_reg.async_list_areas()
+            ]
+        }
 
     async def _call_service(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a Home Assistant service and report the resulting states.
@@ -958,8 +1029,8 @@ class HomeAssistantMCPTools:
         missing targets are reported as errors instead of silently doing
         nothing, so the model cannot claim success for a no-op.
         """
-        domain = str(arguments.get("domain", "")).strip()
-        service = str(arguments.get("service", "")).strip()
+        domain = str(arguments.get("domain", "")).strip().lower()
+        service = str(arguments.get("service", "")).strip().lower()
         target = dict(arguments.get("target") or {})
         data = dict(arguments.get("data") or {})
 
@@ -987,9 +1058,10 @@ class HomeAssistantMCPTools:
         for area in areas:
             area_id = self._resolve_area_id(area)
             if area_id is None:
+                available = await self._list_areas({})
                 return {
                     "error": f"Unknown area: {area}",
-                    "hint": "Use get_area_entities with the room name to find its entities.",
+                    "available_areas": [a["name"] for a in available["areas"]],
                 }
             area_ids.append(area_id)
 
@@ -1049,36 +1121,30 @@ class HomeAssistantMCPTools:
         return {"domain": domain, "entities": entities}
 
     async def _get_area_entities(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Get entities in an area."""
-        area_id = arguments.get("area_id", "")
+        """Get entities in an area (area id, name, alias or a phrase containing it)."""
+        from homeassistant.helpers import area_registry
 
-        from homeassistant.helpers import area_registry, entity_registry
+        query = str(arguments.get("area_id", ""))
+        area_id = self._resolve_area_id(query)
+        if area_id is None:
+            areas = await self._list_areas({})
+            return {
+                "error": f"Area {query} not found",
+                "available_areas": [a["name"] for a in areas["areas"]],
+            }
 
-        area_reg = area_registry.async_get(self._hass)
-        entity_reg = entity_registry.async_get(self._hass)
-
-        # Find area
-        area = area_reg.async_get_area(area_id)
-        if not area:
-            # Try by name
-            for a in area_reg.async_list_areas():
-                if a.name.lower() == area_id.lower():
-                    area = a
-                    break
-
-        if not area:
-            return {"error": f"Area {area_id} not found"}
-
-        # Get entities in area
+        area = area_registry.async_get(self._hass).async_get_area(area_id)
+        domain = str(arguments.get("domain", "")).strip().lower()
         entities = []
-        for entry in entity_reg.entities.values():
-            if entry.area_id == area.id:
-                state = self._hass.states.get(entry.entity_id)
-                if state:
-                    entities.append({
-                        "entity_id": entry.entity_id,
-                        "state": state.state,
-                        "friendly_name": state.attributes.get("friendly_name"),
-                    })
+        for entity_id in self._area_entity_ids(area_id):
+            if domain and not entity_id.startswith(f"{domain}."):
+                continue
+            state = self._hass.states.get(entity_id)
+            if state:
+                entities.append({
+                    "entity_id": entity_id,
+                    "state": state.state,
+                    "friendly_name": state.attributes.get("friendly_name"),
+                })
 
-        return {"area": area.name, "entities": entities}
+        return {"area": area.name if area else area_id, "area_id": area_id, "entities": entities}
