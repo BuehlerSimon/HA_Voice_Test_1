@@ -9,9 +9,9 @@
     "http",
     "frontend"
   ],
-  "documentation": "https://github.com/SJang1/ha-ai-audio",
+  "documentation": "https://github.com/BuehlerSimon/HA_Voice_Test_1",
   "iot_class": "cloud_push",
-  "issue_tracker": "https://github.com/SJang1/ha-ai-audio/issues",
+  "issue_tracker": "https://github.com/BuehlerSimon/HA_Voice_Test_1/issues",
   "requirements": [
     "google-genai>=2.0.0"
   ],
